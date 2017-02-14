@@ -62,7 +62,6 @@ import soot.util.queue.QueueReader;
 public class ParameterSearch {
 	final String FIND_VIEW_BY_ID = "findViewById";
 	final String SET_CONTENT_VIEW = "setContentView";
-	final String SET_SHARED_PREFERENCES = "android.content.SharedPreferences$Editor";
 	final String GET_IDENTIFIER_SIGNATURE = 
 			"<android.content.res.Resources: int getIdentifier(java.lang.String,java.lang.String,java.lang.String)>";
 	final int MAX_RECURSION_COUNT = 10000;
@@ -132,72 +131,6 @@ public class ParameterSearch {
 		    }
 		}
 		System.out.println("SolvedCnt:"+solvedCnt+" UnsolvedCnt:"+unsolvedCnt);
-		return rs;
-	}
-	
-	public Set<Stmt> setSharedPreferencesSearch() {
-		System.out.println("SEARCHING FOR SHARED PREFS");
-		Set<Stmt> rs = new HashSet<Stmt>();
-		int solvedCnt = 0;
-		int unsolvedCnt = 0;
-				
-		
-		for (QueueReader<MethodOrMethodContext> rdr =
-				Scene.v().getReachableMethods().listener(); rdr.hasNext(); ) {
-			SootMethod m = rdr.next().method();
-			if(!m.hasActiveBody()) continue;
-			
-			UnitGraph g = new ExceptionalUnitGraph(m.getActiveBody());
-		    Orderer<Unit> orderer = new PseudoTopologicalOrderer<Unit>();
-		    int cnt = 0;
-		    for (Unit u : orderer.newList(g, false)) {
-		    	cnt++;
-		    	Stmt s = (Stmt)u;
-		    	if(!s.containsInvokeExpr()) continue;
-		    	
-		    	InvokeExpr ie = s.getInvokeExpr();
-		    	SootMethod method = ie.getMethod();
-
-		    	if(method.getSignature().contains(SET_SHARED_PREFERENCES) && method.getName().contains("put")) {
-		    		Value v = ie.getArg(0);
-		    		if(v instanceof Constant){
-		    			//TODO: add constant to map
-		    			System.out.println("Constant SharedPreference in Method: " + v);
-		    			GlobalData global = GlobalData.getInstance();
-		    			global.addPreferenceKey(v.toString());
-		    			solvedCnt++;
-		    			continue;
-		    		}
-		    		
-		    		s.addTag(new StmtPosTag(cnt, m));
-		    		System.out.println("NonConstant SharedPreference in Method:" + s);
-		    		System.out.println("  DeclaringCls:"+cfg.getMethodOf(s).getDeclaringClass().getName());
-		    		List<Tag> tt = s.getTags();
-		    		if((tt != null))
-		    			for(Tag t : tt)
-		    				System.out.println("  TAG: "+t.toString());
-		    		rs.add(s);
-		    		GraphTool.displayGraph(g, m);
-		    		//searchVariableDefs(g, s, v, new ArrayList<List<Object>>(), m);
-		    		
-		    		//v2
-		    		String pref = findLastResStringAssignment(s, v, cfg, new HashSet<Stmt>());
-		    		if(pref == null){
-		    			System.out.println("  Failed to resolve this Pref.");
-		    			unsolvedCnt++;
-		    		}
-		    		else{
-		    			System.out.println("  Pref Key: "+pref);
-		    			solvedCnt++;
-		    			GlobalData global = GlobalData.getInstance();
-		    			global.addPreferenceKey(pref);
-		    			//global.addLayoutID(s, cfg, id);
-		    		}
-		    	}
-		    }
-		}
-		System.out.println("JAMES: SHARED PREFERENCE SOLVED COUNT = " + solvedCnt);
-		System.out.println("JAMES: SHARED PREFERENCE UNSOLVED COUNT = " + unsolvedCnt);
 		return rs;
 	}
 	
@@ -545,101 +478,7 @@ public class ParameterSearch {
 	}
 	
 
-	private String findLastResStringAssignment(Stmt stmt, Value target, BiDiInterproceduralCFG<Unit, SootMethod> cfg, Set<Stmt> visited) {
-//		if (!doneSet.add(stmt))
-//			return null;
-		if(visited.contains(stmt)){
-			return null;
-		}
-		visited.add(stmt);
-		
-		if(cfg == null) {
-			System.err.println("Error: findLastResIDAssignment cfg is not set.");
-			return null;
-		}
-		// If this is an assign statement, we need to check whether it changes
-		// the variable we're looking for
-		if (stmt instanceof AssignStmt) {
-			AssignStmt assign = (AssignStmt) stmt;
-			if (assign.getLeftOp() == target) {
-				System.out.println("Debug: "+assign+" "+assign.getRightOp().getClass());
-				// ok, now find the new value from the right side
-				if (assign.getRightOp() instanceof StringConstant) {
-					System.out.println("Debug: Assign was a constant");
-					return ((StringConstant) assign.getRightOp()).value;
-				} else if (assign.getRightOp() instanceof FieldRef) {
-					System.out.println("Debug: Assign was field ref");
-					SootField field = ((FieldRef) assign.getRightOp()).getField();
-					for (Tag tag : field.getTags()){
-						if (tag instanceof StringConstantValueTag){
-							//System.out.println("This is an integerCOnstantValue");
-							return ((StringConstantValueTag) tag).getStringValue();
-						}
-						else
-							System.err.println("  Constant " + field + " was of unexpected type");
-					}
-					if(assign.getRightOp() instanceof StaticFieldRef){
-						StaticFieldRef sfr = (StaticFieldRef)assign.getRightOp();
-						/*if(sfr.getFieldRef().declaringClass().getName().endsWith(".R$id")){
-							Integer id = valResParser.getResourceIDFromValueResourceFile(sfr.getFieldRef().name());
-							if(id != null)
-								return id;
-						}
-						*/
-						System.out.println("  Field not assigned:"+sfr);
-						target = assign.getRightOp();
-					}
-				} 
-				else if(assign.getRightOp() instanceof Local){
-					System.out.println("Debug: Assign was local");
-					target = assign.getRightOp();
-				}
-				else if (assign.getRightOp() instanceof InvokeExpr) {
-					System.out.println("Debug: Assign was invoke");
-					InvokeExpr inv = (InvokeExpr) assign.getRightOp();
-				}
-			}
-			
-		}
-		else if(stmt instanceof IdentityStmt){
-			IdentityStmt is = (IdentityStmt)stmt;
-			if(is.getLeftOp() == target){
-				System.out.println("From IdentityStmt: "+is);
-				if(is.getRightOp() instanceof ParameterRef){
-					ParameterRef right = (ParameterRef)(is.getRightOp());
-					int idx = right.getIndex();
-					Collection<Unit> callers = cfg.getCallersOf(cfg.getMethodOf(stmt));
-					if(callers != null && callers.size()>0){
-						for(Unit caller : callers){
-							System.out.println("  Caller: From IdentityStmt: "+caller);
-							InvokeExpr ie = ((Stmt)caller).getInvokeExpr();
-							if(idx >= ie.getArgCount())
-								continue;
-							Value arg = ie.getArg(idx);
-							if(arg instanceof StringConstant)
-								return ((StringConstant) arg).value;
-							else{
-								System.out.println("Still not integer");
-								String lastAssignment = findLastResStringAssignment((Stmt) caller, arg, cfg, visited);
-								if (lastAssignment != null)
-									return lastAssignment;
-							}
-						}
-					}
-				}
-			}
-		}
 
-		// Continue the search upwards
-		for (Unit pred : cfg.getPredsOf(stmt)) {
-			if (!(pred instanceof Stmt))
-				continue;
-			String lastAssignment = findLastResStringAssignment((Stmt) pred, target, cfg, visited);
-			if (lastAssignment != null)
-				return lastAssignment;
-		}
-		return null;
-	}
 	
 	/**
 	 * Finds the last assignment to the given String local by searching upwards

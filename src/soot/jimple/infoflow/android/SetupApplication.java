@@ -54,6 +54,7 @@ import soot.jimple.infoflow.android.nu.LayoutFileParserForTextExtraction;
 import soot.jimple.infoflow.android.nu.LayoutTextTreeNode;
 import soot.jimple.infoflow.android.nu.ParameterSearch;
 import soot.jimple.infoflow.android.nu.ResourceManager;
+import soot.jimple.infoflow.android.nu.SharedPreferenceSearch;
 import soot.jimple.infoflow.android.nu.ValueResourceParser;
 import soot.jimple.infoflow.android.nu.ViewFlowRelateSourceSinkManager;
 import soot.jimple.infoflow.android.resources.ARSCFileParser;
@@ -1123,10 +1124,11 @@ public class SetupApplication {
 		info.initializeSootWithoutPerformingInfoflow(apkFileLocation, path, entryPointCreator);
 		
 		ParameterSearch ps = new ParameterSearch(valResMgr, this.resourcePackages,this.appPackageName, info.getICFG());
+		SharedPreferenceSearch sps = new SharedPreferenceSearch(info.getICFG());
 		Set<Stmt> rs = ps.findViewByIdParamSearch();
 		ps.setContentViewSearch();
 		ps.findPreferenceSetMethods();
-		ps.setSharedPreferencesSearch();
+		sps.setSharedPreferencesSearch();
 		//GraphTool.displayAllMethodGraph();
 		soot.G.reset();
 		return rs;
